@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard1.3;netstandard2.0</TargetFrameworks>
     <TargetFrameworks Condition=" '$(OS)' == 'Windows_NT' ">$(TargetFrameworks);net452;net461</TargetFrameworks>
-    <TargetFrameworks Condition=" '$(OS)' == 'Windows_NT' AND '$(MSBuildRuntimeType)' != 'Core'">$(TargetFrameworks);uap10.0</TargetFrameworks>
+    <TargetFrameworks Condition=" '$(OS)' == 'Windows_NT' AND '$(MSBuildRuntimeType)' != 'Core' AND '$(SolutionName)' != 'MQTTnet.noUWP' ">$(TargetFrameworks);uap10.0</TargetFrameworks>
     <AssemblyName>MQTTnet</AssemblyName>
     <RootNamespace>MQTTnet</RootNamespace>
     <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
@@ -41,20 +41,20 @@
     <DefineConstants>RELEASE;NETSTANDARD1_3</DefineConstants>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)'=='netstandard2.0'">
-    <PackageReference Include="System.Net.Security" Version="4.3.2" />
-    <PackageReference Include="System.Net.WebSockets" Version="4.3.0" />
-    <PackageReference Include="System.Net.WebSockets.Client" Version="4.3.2" />
-  </ItemGroup>
-
   <ItemGroup Condition="'$(TargetFramework)'=='netstandard1.3'">
     <PackageReference Include="System.Net.Security" Version="4.3.2" />
     <PackageReference Include="System.Net.WebSockets" Version="4.3.0" />
     <PackageReference Include="System.Net.WebSockets.Client" Version="4.3.2" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)'=='netstandard2.0'">
+    <PackageReference Include="System.Net.Security" Version="4.3.2" />
+    <PackageReference Include="System.Net.WebSockets" Version="4.3.0" />
+    <PackageReference Include="System.Net.WebSockets.Client" Version="4.3.2" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)'=='uap10.0'">
-    <PackageReference Include="Microsoft.NETCore.UniversalWindowsPlatform" Version="6.1.9" />
+    <PackageReference Include="Microsoft.NETCore.UniversalWindowsPlatform" Version="6.2.8" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)'=='net452'">
@@ -62,5 +62,5 @@
 
   <ItemGroup Condition="'$(TargetFramework)'=='net461'">
   </ItemGroup>
-
+  
 </Project>

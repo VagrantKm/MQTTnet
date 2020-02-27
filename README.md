@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://github.com/chkr1011/MQTTnet/blob/master/Images/Logo_128x128.png?raw=true" width="128">
+<img src="https://github.com/chkr1011/MQTTnet/blob/master/Images/icon_det_256.png?raw=true" width="196">
 <br/>
 <br/>
 </p>
@@ -8,7 +8,8 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/ycit86voxfevm2aa/branch/master?svg=true)](https://ci.appveyor.com/project/chkr1011/mqttnet)
 [![BCH compliance](https://bettercodehub.com/edge/badge/chkr1011/MQTTnet?branch=master)](https://bettercodehub.com/)
 [![OpenCollective](https://opencollective.com/mqttnet/backers/badge.svg)](https://opencollective.com/mqttnet) 
-[![OpenCollective](https://opencollective.com/mqttnet/sponsors/badge.svg)](https://opencollective.com/mqttnet)
+[![OpenCollective](https://opencollective.com/mqttnet/sponsors/badge.svg)](https://opencollective.com/mqttnet) [![Join the chat at https://gitter.im/MQTTnet/community](https://badges.gitter.im/MQTTnet/community.svg)](https://gitter.im/MQTTnet/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://raw.githubusercontent.com/chkr1011/MQTTnet/master/LICENSE)
 
 # MQTTnet
 
@@ -20,12 +21,14 @@ MQTTnet is a high performance .NET library for MQTT based communication. It prov
 
 * Async support
 * TLS 1.2 support for client and server (but not UWP servers)
-* Extensible communication channels (i.e. In-Memory, TCP, TCP+TLS, WS)
+* Extensible communication channels (e.g. In-Memory, TCP, TCP+TLS, WS)
 * Lightweight (only the low level implementation of MQTT, no overhead)
 * Performance optimized (processing ~70.000 messages / second)*
+* Uniform API across all supported versions of the MQTT protocol
 * Interfaces included for mocking and testing
 * Access to internal trace messages
-* Unit tested (~100 tests)
+* Unit tested (~210 tests)
+* No external dependencies
 
 \* Tested on local machine (Intel i7 8700K) with MQTTnet client and server running in the same process using the TCP channel. The app for verification is part of this repository and stored in _/Tests/MQTTnet.TestApp.NetCore_.
 
@@ -48,6 +51,17 @@ MQTTnet is a high performance .NET library for MQTT based communication. It prov
 * WebSockets supported (via ASP.NET Core 2.0, separate nuget)
 * A custom message interceptor can be added which allows transforming or extending every received application message
 * Validate subscriptions and deny subscribing of certain topics depending on requesting clients
+* Connect clients with different protocol versions at the same time.
+
+## MQTTnet Server
+
+_MQTTnet Server_ is a standalone cross platform MQTT server (like mosquitto) basing on this library. It has the following features.
+* Running portable (no installation required)
+* Runs und Windows, Linux, macOS, Raspberry Pi
+* Python scripting support for manipulating messages, validation of clients, building business logic etc.
+* Supports WebSocket and TCP (with and without TLS) connections
+* Provides a HTTP based API (including Swagger endpoint)
+* Extensive configuration parameters and customization supported
 
 ## Supported frameworks
 
@@ -62,7 +76,7 @@ MQTTnet is a high performance .NET library for MQTT based communication. It prov
 
 ## Supported MQTT versions
 
-* 5.0.0 (planned)
+* 5.0.0
 * 3.1.1
 * 3.1.0
 
@@ -79,7 +93,7 @@ Please find examples and the documentation at the Wiki of this repository (<http
 If you want to contribute to this project just create a pull request. But only pull requests which are matching the code style of this library will be accepted. Before creating a pull request please have a look at the library to get an overview of the required style.
 Also additions and updates in the Wiki are welcome.
 
-This project also listed at Open Collective (https://opencollective.com/mqttnet).
+**This project, like all projects requires time and money.  If you feel compelled to support the development team, you can do so through Open Collective (https://opencollective.com/mqttnet)**.
 
 ## References
 
@@ -91,11 +105,15 @@ This library is used in the following projects:
 * MQTT Tester (MQTT client test app for [Android](https://play.google.com/store/apps/details?id=com.liveowl.mqtttester) and [iOS](https://itunes.apple.com/us/app/mqtt-tester/id1278621826?mt=8))
 * Wirehome.Core (Open Source Home Automation system for .NET Core, <https://github.com/chkr1011/Wirehome.Core>)
 
+Further projects using this project can be found under https://github.com/chkr1011/MQTTnet/network/dependents.
+
 If you use this library and want to see your project here please create a pull request.
 
-## MIT License
+## License
 
-Copyright (c) 2017-2018 Christian Kratky
+MIT License
+
+MQTTnet Copyright (c) 2016-2019 Christian Kratky
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

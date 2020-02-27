@@ -1,17 +1,27 @@
 ﻿using System;
 using System.Net.WebSockets;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using MQTTnet.Adapter;
 using MQTTnet.Diagnostics;
+using MQTTnet.Formatter;
 using MQTTnet.Implementations;
-using MQTTnet.Serializer;
 using MQTTnet.Server;
 
 namespace MQTTnet.AspNetCore
 {
     public class MqttWebSocketServerAdapter : IMqttServerAdapter
     {
-        public event EventHandler<MqttServerAdapterClientAcceptedEventArgs> ClientAccepted;
+        private readonly IMqttNetChildLogger _logger;
+
+        public MqttWebSocketServerAdapter(IMqttNetChildLogger logger)
+        {
+            if (logger == null) throw new ArgumentNullException(nameof(logger));
+
+            _logger = logger.CreateChildLogger(nameof(MqttTcpServerAdapter));
+        }
+
+        public Func<IMqttChannelAdapter, Task> ClientHandler { get; set; }
 
         public Task StartAsync(IMqttServerOptions options)
         {
@@ -23,24 +33,38 @@ namespace MQTTnet.AspNetCore
             return Task.CompletedTask;
         }
 
-        public async Task RunWebSocketConnectionAsync(WebSocket webSocket, string endpoint)
+        public async Task RunWebSocketConnectionAsync(WebSocket webSocket, HttpContext httpContext)
         {
             if (webSocket == null) throw new ArgumentNullException(nameof(webSocket));
 
-            var clientAdapter = new MqttChannelAdapter(new MqttWebSocketChannel(webSocket, endpoint), new MqttPacketSerializer(), new MqttNetLogger().CreateChildLogger(nameof(MqttWebSocketServerAdapter)));
-
-            var eventArgs = new MqttServerAdapterClientAcceptedEventArgs(clientAdapter);
-            ClientAccepted?.Invoke(this, eventArgs);
-
-            if (eventArgs.SessionTask != null)
+            var endpoint = $"{httpContext.Connection.RemoteIpAddress}:{httpContext.Connection.RemotePort}";
+            
+            var clientCertificate = await httpContext.Connection.GetClientCertificateAsync().ConfigureAwait(false);
+            try
             {
-                await eventArgs.SessionTask.ConfigureAwait(false);
+                var isSecureConnection = clientCertificate != null;
+
+                var clientHandler = ClientHandler;
+                if (clientHandler != null)
+                {
+                    var writer = new SpanBasedMqttPacketWriter();
+                    var formatter = new MqttPacketFormatterAdapter(writer);
+                    var channel = new MqttWebSocketChannel(webSocket, endpoint, isSecureConnection, clientCertificate);
+
+                    using (var channelAdapter = new MqttChannelAdapter(channel, formatter, _logger.CreateChildLogger(nameof(MqttWebSocketServerAdapter))))
+                    {
+                        await clientHandler(channelAdapter).ConfigureAwait(false);
+                    }
+                }
+            }
+            finally
+            {
+                clientCertificate?.Dispose();
             }
         }
-        
+
         public void Dispose()
         {
-            StopAsync().GetAwaiter().GetResult();
         }
     }
 }
