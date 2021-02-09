@@ -1,7 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using MQTTnet.Packets;
+﻿using MQTTnet.Packets;
 using MQTTnet.Protocol;
+using System;
+using System.Collections.Generic;
 
 namespace MQTTnet.Client.Subscribing
 {
@@ -9,6 +9,13 @@ namespace MQTTnet.Client.Subscribing
     {
         private readonly MqttClientSubscribeOptions _subscribeOptions = new MqttClientSubscribeOptions();
 
+        /// <summary>
+        /// Adds the user property to the subscribe options.
+        /// Hint: MQTT 5 feature only.
+        /// </summary>
+        /// <param name="name">The property name.</param>
+        /// <param name="value">The property value.</param>
+        /// <returns>A new instance of the <see cref="MqttApplicationMessageBuilder"/> class.</returns>
         public MqttClientSubscribeOptionsBuilder WithUserProperty(string name, string value)
         {
             if (name == null) throw new ArgumentNullException(nameof(name));
@@ -27,7 +34,6 @@ namespace MQTTnet.Client.Subscribing
         public MqttClientSubscribeOptionsBuilder WithSubscriptionIdentifier(uint? subscriptionIdentifier)
         {
             _subscribeOptions.SubscriptionIdentifier = subscriptionIdentifier;
-
             return this;
         }
 
@@ -38,7 +44,7 @@ namespace MQTTnet.Client.Subscribing
             bool? retainAsPublished = null,
             MqttRetainHandling? retainHandling = null)
         {
-            return WithTopicFilter(new TopicFilter
+            return WithTopicFilter(new MqttTopicFilter
             {
                 Topic = topic,
                 QualityOfServiceLevel = qualityOfServiceLevel,
@@ -48,30 +54,30 @@ namespace MQTTnet.Client.Subscribing
             });
         }
 
-        public MqttClientSubscribeOptionsBuilder WithTopicFilter(Action<TopicFilterBuilder> topicFilterBuilder)
+        public MqttClientSubscribeOptionsBuilder WithTopicFilter(Action<MqttTopicFilterBuilder> topicFilterBuilder)
         {
             if (topicFilterBuilder == null) throw new ArgumentNullException(nameof(topicFilterBuilder));
 
-            var internalTopicFilterBuilder = new TopicFilterBuilder();
+            var internalTopicFilterBuilder = new MqttTopicFilterBuilder();
             topicFilterBuilder(internalTopicFilterBuilder);
 
             return WithTopicFilter(internalTopicFilterBuilder);
         }
 
-        public MqttClientSubscribeOptionsBuilder WithTopicFilter(TopicFilterBuilder topicFilterBuilder)
+        public MqttClientSubscribeOptionsBuilder WithTopicFilter(MqttTopicFilterBuilder topicFilterBuilder)
         {
             if (topicFilterBuilder == null) throw new ArgumentNullException(nameof(topicFilterBuilder));
 
             return WithTopicFilter(topicFilterBuilder.Build());
         }
 
-        public MqttClientSubscribeOptionsBuilder WithTopicFilter(TopicFilter topicFilter)
+        public MqttClientSubscribeOptionsBuilder WithTopicFilter(MqttTopicFilter topicFilter)
         {
             if (topicFilter == null) throw new ArgumentNullException(nameof(topicFilter));
 
             if (_subscribeOptions.TopicFilters == null)
             {
-                _subscribeOptions.TopicFilters = new List<TopicFilter>();
+                _subscribeOptions.TopicFilters = new List<MqttTopicFilter>();
             }
 
             _subscribeOptions.TopicFilters.Add(topicFilter);

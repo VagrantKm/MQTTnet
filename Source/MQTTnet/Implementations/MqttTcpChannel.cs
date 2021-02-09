@@ -1,29 +1,30 @@
 #if !WINDOWS_UWP
-using System;
-using System.Net.Security;
-using System.Net.Sockets;
-using System.Security.Cryptography.X509Certificates;
-using System.Threading.Tasks;
-using System.IO;
-using System.Linq;
-using System.Runtime.ExceptionServices;
-using System.Threading;
 using MQTTnet.Channel;
 using MQTTnet.Client.Options;
+using System;
+using System.IO;
+using System.Linq;
+using System.Net.Security;
+using System.Net.Sockets;
+using System.Runtime.ExceptionServices;
+using System.Security.Cryptography.X509Certificates;
+using System.Threading;
+using System.Threading.Tasks;
+using MQTTnet.Exceptions;
 
 namespace MQTTnet.Implementations
 {
-    public class MqttTcpChannel : IMqttChannel
+    public sealed class MqttTcpChannel : IMqttChannel
     {
-        private readonly IMqttClientOptions _clientOptions;
-        private readonly MqttClientTcpOptions _options;
+        readonly IMqttClientOptions _clientOptions;
+        readonly MqttClientTcpOptions _tcpOptions;
 
-        private Stream _stream;
+        Stream _stream;
 
         public MqttTcpChannel(IMqttClientOptions clientOptions)
         {
             _clientOptions = clientOptions ?? throw new ArgumentNullException(nameof(clientOptions));
-            _options = (MqttClientTcpOptions)clientOptions.ChannelOptions;
+            _tcpOptions = (MqttClientTcpOptions)clientOptions.ChannelOptions;
 
             IsSecureConnection = clientOptions.ChannelOptions?.TlsOptions?.UseTls == true;
         }
@@ -46,54 +47,82 @@ namespace MQTTnet.Implementations
 
         public async Task ConnectAsync(CancellationToken cancellationToken)
         {
-            Socket socket;
+            CrossPlatformSocket socket = null;
+            try
+            {
+                if (_tcpOptions.AddressFamily == AddressFamily.Unspecified)
+                {
+                    socket = new CrossPlatformSocket();
+                }
+                else
+                {
+                    socket = new CrossPlatformSocket(_tcpOptions.AddressFamily);
+                }
 
-            if (_options.AddressFamily == AddressFamily.Unspecified)
-            {
-                socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
-            }
-            else
-            {
-                socket = new Socket(_options.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-            }
+                socket.ReceiveBufferSize = _tcpOptions.BufferSize;
+                socket.SendBufferSize = _tcpOptions.BufferSize;
+                socket.SendTimeout = (int)_clientOptions.CommunicationTimeout.TotalMilliseconds;
+                socket.NoDelay = _tcpOptions.NoDelay;
 
-            socket.ReceiveBufferSize = _options.BufferSize;
-            socket.SendBufferSize = _options.BufferSize;
-            socket.NoDelay = _options.NoDelay;
+                if (_tcpOptions.DualMode.HasValue)
+                {
+                    // It is important to avoid setting the flag if no specific value is set by the user
+                    // because on IPv4 only networks the setter will always throw an exception. Regardless
+                    // of the actual value.
+                    socket.DualMode = _tcpOptions.DualMode.Value;
+                }
 
-            if (_options.DualMode.HasValue)
-            {
-                // It is important to avoid setting the flag if no specific value is set by the user
-                // because on IPv4 only networks the setter will always throw an exception. Regardless
-                // of the actual value.
-                socket.DualMode = _options.DualMode.Value;
-            }
-            
-            // Workaround for: workaround for https://github.com/dotnet/corefx/issues/24430
-            using (cancellationToken.Register(() => socket.Dispose()))
-            {
-#if NET452 || NET461
-                await Task.Factory.FromAsync(socket.BeginConnect, socket.EndConnect, _options.Server, _options.GetPort(), null).ConfigureAwait(false);
+                await socket.ConnectAsync(_tcpOptions.Server, _tcpOptions.GetPort(), cancellationToken).ConfigureAwait(false);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var networkStream = socket.GetStream();
+
+                if (_tcpOptions.TlsOptions?.UseTls == true)
+                {
+                    var sslStream = new SslStream(networkStream, false, InternalUserCertificateValidationCallback);
+                    try
+                    {
+#if NETCOREAPP3_1
+                        var sslOptions = new SslClientAuthenticationOptions
+                        {
+                            ApplicationProtocols = _tcpOptions.TlsOptions.ApplicationProtocols,
+                            ClientCertificates = LoadCertificates(),
+                            EnabledSslProtocols = _tcpOptions.TlsOptions.SslProtocol,
+                            CertificateRevocationCheckMode = _tcpOptions.TlsOptions.IgnoreCertificateRevocationErrors ? X509RevocationMode.NoCheck : X509RevocationMode.Online,
+                            TargetHost = _tcpOptions.Server
+                        };
+
+                        await sslStream.AuthenticateAsClientAsync(sslOptions, cancellationToken).ConfigureAwait(false);
 #else
-                await socket.ConnectAsync(_options.Server, _options.GetPort()).ConfigureAwait(false);
+                        await sslStream.AuthenticateAsClientAsync(_tcpOptions.Server, LoadCertificates(), _tcpOptions.TlsOptions.SslProtocol, !_tcpOptions.TlsOptions.IgnoreCertificateRevocationErrors).ConfigureAwait(false);
 #endif
+                    }
+                    catch
+                    {
+#if NETSTANDARD2_1 || NETCOREAPP3_1
+                        await sslStream.DisposeAsync().ConfigureAwait(false);
+#else
+                        sslStream.Dispose();
+#endif
+
+                        throw;
+                    }
+
+                    _stream = sslStream;
+                }
+                else
+                {
+                    _stream = networkStream;
+                }
+
+                Endpoint = socket.RemoteEndPoint?.ToString();
             }
-
-            var networkStream = new NetworkStream(socket, true);
-
-            if (_options.TlsOptions.UseTls)
+            catch (Exception)
             {
-                var sslStream = new SslStream(networkStream, false, InternalUserCertificateValidationCallback);
-                _stream = sslStream;
-
-                await sslStream.AuthenticateAsClientAsync(_options.Server, LoadCertificates(), _options.TlsOptions.SslProtocol, !_options.TlsOptions.IgnoreCertificateRevocationErrors).ConfigureAwait(false);                
+                socket?.Dispose();
+                throw;
             }
-            else
-            {
-                _stream = networkStream;
-            }
-
-            Endpoint = socket.RemoteEndPoint?.ToString();
         }
 
         public Task DisconnectAsync(CancellationToken cancellationToken)
@@ -104,18 +133,32 @@ namespace MQTTnet.Implementations
 
         public async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             try
             {
+                var stream = _stream;
+
+                if (stream == null)
+                {
+                    return 0;
+                }
+
+                if (!stream.CanRead)
+                {
+                    return 0;
+                }
+
                 // Workaround for: https://github.com/dotnet/corefx/issues/24430
                 using (cancellationToken.Register(Dispose))
                 {
-                    if (cancellationToken.IsCancellationRequested)
-                    {
-                        return 0;
-                    }
-
-                    return await _stream.ReadAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+                    return await stream.ReadAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
                 }
+            }
+            catch (ObjectDisposedException)
+            {
+                // Indicate a graceful socket close.
+                return 0;
             }
             catch (IOException exception)
             {
@@ -130,18 +173,26 @@ namespace MQTTnet.Implementations
 
         public async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             try
             {
                 // Workaround for: https://github.com/dotnet/corefx/issues/24430
                 using (cancellationToken.Register(Dispose))
                 {
-                    if (cancellationToken.IsCancellationRequested)
+                    var stream = _stream;
+
+                    if (stream == null)
                     {
-                        return;
+                        throw new MqttCommunicationException("The TCP connection is closed.");
                     }
 
-                    await _stream.WriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+                    await stream.WriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
                 }
+            }
+            catch (ObjectDisposedException)
+            {
+                throw new MqttCommunicationException("The TCP connection is closed.");
             }
             catch (IOException exception)
             {
@@ -173,11 +224,31 @@ namespace MQTTnet.Implementations
             _stream = null;
         }
 
-        private bool InternalUserCertificateValidationCallback(object sender, X509Certificate x509Certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        bool InternalUserCertificateValidationCallback(object sender, X509Certificate x509Certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
         {
-            if (_options.TlsOptions.CertificateValidationCallback != null)
+            #region OBSOLETE
+
+#pragma warning disable CS0618 // Type or member is obsolete
+            var certificateValidationCallback = _tcpOptions?.TlsOptions?.CertificateValidationCallback;
+#pragma warning restore CS0618 // Type or member is obsolete
+            if (certificateValidationCallback != null)
             {
-                return _options.TlsOptions.CertificateValidationCallback(x509Certificate, chain, sslPolicyErrors, _clientOptions);
+                return certificateValidationCallback(x509Certificate, chain, sslPolicyErrors, _clientOptions);
+            }
+            #endregion
+
+            var certificateValidationHandler = _tcpOptions?.TlsOptions?.CertificateValidationHandler;
+            if (certificateValidationHandler != null)
+            {
+                var context = new MqttClientCertificateValidationCallbackContext
+                {
+                    Certificate = x509Certificate,
+                    Chain = chain,
+                    SslPolicyErrors = sslPolicyErrors,
+                    ClientOptions = _tcpOptions
+                };
+
+                return certificateValidationHandler(context);
             }
 
             if (sslPolicyErrors == SslPolicyErrors.None)
@@ -187,7 +258,7 @@ namespace MQTTnet.Implementations
 
             if (chain.ChainStatus.Any(c => c.Status == X509ChainStatusFlags.RevocationStatusUnknown || c.Status == X509ChainStatusFlags.Revoked || c.Status == X509ChainStatusFlags.OfflineRevocation))
             {
-                if (!_options.TlsOptions.IgnoreCertificateRevocationErrors)
+                if (_tcpOptions?.TlsOptions?.IgnoreCertificateRevocationErrors != true)
                 {
                     return false;
                 }
@@ -195,26 +266,26 @@ namespace MQTTnet.Implementations
 
             if (chain.ChainStatus.Any(c => c.Status == X509ChainStatusFlags.PartialChain))
             {
-                if (!_options.TlsOptions.IgnoreCertificateChainErrors)
+                if (_tcpOptions?.TlsOptions?.IgnoreCertificateChainErrors != true)
                 {
                     return false;
                 }
             }
 
-            return _options.TlsOptions.AllowUntrustedCertificates;
+            return _tcpOptions?.TlsOptions?.AllowUntrustedCertificates == true;
         }
 
-        private X509CertificateCollection LoadCertificates()
+        X509CertificateCollection LoadCertificates()
         {
             var certificates = new X509CertificateCollection();
-            if (_options.TlsOptions.Certificates == null)
+            if (_tcpOptions.TlsOptions.Certificates == null)
             {
                 return certificates;
             }
 
-            foreach (var certificate in _options.TlsOptions.Certificates)
+            foreach (var certificate in _tcpOptions.TlsOptions.Certificates)
             {
-                certificates.Add(new X509Certificate2(certificate));
+                certificates.Add(certificate);
             }
 
             return certificates;

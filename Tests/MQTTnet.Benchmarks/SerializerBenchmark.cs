@@ -8,10 +8,12 @@ using MQTTnet.Adapter;
 using MQTTnet.Channel;
 using MQTTnet.Formatter;
 using MQTTnet.Formatter.V3;
+using BenchmarkDotNet.Jobs;
+using MQTTnet.Diagnostics;
 
 namespace MQTTnet.Benchmarks
 {
-    [ClrJob]
+    [SimpleJob(RuntimeMoniker.Net461)]
     [RPlotExporter]
     [MemoryDiagnoser]
     public class SerializerBenchmark
@@ -28,7 +30,7 @@ namespace MQTTnet.Benchmarks
                 Topic = "A"
             };
 
-            _serializer = new MqttV311PacketFormatter();
+            _serializer = new MqttV311PacketFormatter(new MqttPacketWriter());
             _serializedPacket = _serializer.Encode(_packet);
         }
 
@@ -47,19 +49,13 @@ namespace MQTTnet.Benchmarks
         {
             var channel = new BenchmarkMqttChannel(_serializedPacket);
             var fixedHeader = new byte[2];
-            var reader = new MqttPacketReader(channel);
+            var reader = new MqttChannelAdapter(channel, new MqttPacketFormatterAdapter(new MqttPacketWriter()), null, new MqttNetLogger());
 
             for (var i = 0; i < 10000; i++)
             {
                 channel.Reset();
 
-                var header = reader.ReadFixedHeaderAsync(fixedHeader, CancellationToken.None).GetAwaiter().GetResult().FixedHeader;
-
-                var receivedPacket = new ReceivedMqttPacket(
-                    header.Flags,
-                    new MqttPacketBodyReader(_serializedPacket.Array, _serializedPacket.Count - header.RemainingLength, _serializedPacket.Array.Length), 0);
-
-                _serializer.Decode(receivedPacket);
+                var header = reader.ReceivePacketAsync(CancellationToken.None).GetAwaiter().GetResult();
             }
         }
 

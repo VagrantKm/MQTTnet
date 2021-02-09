@@ -1,12 +1,19 @@
-﻿using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace MQTTnet.Server.Status
 {
     public interface IMqttSessionStatus
     {
-        string ClientId { get; set; }
+        /// <summary>
+        /// Gets the client identifier.
+        /// Hint: This identifier needs to be unique over all used clients / devices on the broker to avoid connection issues.
+        /// </summary>
+        string ClientId { get; }
 
-        long PendingApplicationMessagesCount { get; set; }
+        long PendingApplicationMessagesCount { get; }
+
+        IDictionary<object, object> Items { get; }
 
         Task ClearPendingApplicationMessagesAsync();
 

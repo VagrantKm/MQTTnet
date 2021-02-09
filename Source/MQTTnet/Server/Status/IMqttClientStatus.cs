@@ -1,15 +1,19 @@
-﻿using System;
+﻿using MQTTnet.Formatter;
+using System;
 using System.Threading.Tasks;
-using MQTTnet.Formatter;
 
 namespace MQTTnet.Server.Status
 {
     public interface IMqttClientStatus
     {
+        /// <summary>
+        /// Gets the client identifier.
+        /// Hint: This identifier needs to be unique over all used clients / devices on the broker to avoid connection issues.
+        /// </summary>
         string ClientId { get; }
 
         string Endpoint { get; }
-        
+
         MqttProtocolVersion ProtocolVersion { get; }
 
         DateTime LastPacketReceivedTimestamp { get; }
@@ -29,7 +33,7 @@ namespace MQTTnet.Server.Status
         long BytesSent { get; }
 
         long BytesReceived { get; }
-        
+
         Task DisconnectAsync();
 
         void ResetStatistics();
